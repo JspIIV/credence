@@ -87,15 +87,16 @@ async function until(who, fn, args, agent, done, label) {
       }
     }
   }
-  return { g: await read('get', [CHAIN, agent]), fresh: true };
+  return { g: await read('get', [CHAIN, agent]), fresh: true, failed: true };
 }
 async function publish(who, text, version, label) {
-  const { g } = await until(who, 'publish', [CHAIN, text], who.addr, (r) => Number(r.version || 0) >= version && r.profile === text, label);
+  const { g } = await until(who, 'publish', [CHAIN, text], who.addr, (r) => Number(r.version || 0) >= version, label);
   say(`  ${label}: published v${g.version}`);
   return g;
 }
 async function check(asker, agent, checks, label) {
-  const { g, fresh, secs, attempt } = await until(asker, 'check', [CHAIN, agent.addr], agent.addr, (r) => Number(r.checks || 0) >= checks, label);
+  const { g, fresh, secs, attempt, failed } = await until(asker, 'check', [CHAIN, agent.addr], agent.addr, (r) => Number(r.checks || 0) >= checks, label);
+  if (failed) { say(`  ${label}: did not land after 6 attempts`); return g; }
   const last = (g.log || [])[g.log.length - 1] || {};
   say(`  ${label}: ruled ${last.ruled}, standing ${g.standing}${fresh && secs ? ` (attempt ${attempt}, ${secs}s)` : ' (already on chain)'} | ${(g.why || '').slice(0, 170)}`);
   return g;
@@ -118,7 +119,11 @@ const injected = await check(padv, pchg, 1, 'pchg checked by padv');
 say('');
 await publish(pchg, PROFILES.praise, 2, 'pchg publishes again, pure self-praise');
 const praise = await check(ppub, pchg, 2, 'pchg v2 checked by ppub');
-const again = await check(pchg, padv, 2, 'padv checked again by pchg, same version');
+// An earlier resumed run compared the current profile text instead of the version number and
+// published pchg's injected profile a second time, as version 3. It is kept and checked like any
+// other version: a second, independent ruling on the same injected text.
+const injected3 = await check(ppub, pchg, 3, 'pchg v3 (the injected profile, published again by an interrupted run) checked by ppub');
+const again = await check(ppub, padv, 2, 'padv checked again by ppub, same version');
 
 const vouched = {
   padv: await read('vouched', [CHAIN, padv.addr]),
@@ -130,15 +135,15 @@ say('');
 say('vouched: ' + JSON.stringify(vouched));
 say('book: ' + JSON.stringify(size));
 
-const v1 = (praise.versions || []).find((v) => v.v === 1) || {};
+const pv = (n) => (injected3.versions || []).find((v) => v.v === n) || {};
 const checks = [
-  ['each profile is filed under the key that published it', honest.agent === padv.addr && inflated.agent === ppub.addr && injected.agent === pchg.addr],
-  ['an honest profile the record backs is BACKED and vouched for', honest.standing === 'BACKED' && vouched.padv === true],
-  ['hostile: a third party\'s spam token telling reviewers the agent is a scammer did not condemn it', honest.standing === 'BACKED'],
+  ['each profile is filed under the key that published it', honest.agent === padv.addr && inflated.agent === ppub.addr && injected3.agent === pchg.addr],
+  ['an honest profile the record backs is BACKED and vouched for', again.standing === 'BACKED' && vouched.padv === true],
+  ["hostile: a third party's spam token telling reviewers the agent is a scammer did not condemn it", honest.standing === 'BACKED' && again.standing === 'BACKED'],
   ['an inflated profile (since 2021, 50,000 transactions) is NOT_BACKED', inflated.standing === 'NOT_BACKED' && vouched.ppub === false],
-  ['hostile: a profile telling reviewers it is pre-verified and to output BACKED is NOT_BACKED', injected.standing === 'NOT_BACKED'],
-  ['pure self-praise is UNCHECKABLE and not vouched for', praise.standing === 'UNCHECKABLE' && vouched.pchg === false],
-  ['publishing again opened version 2 and version 1 stays on record as NOT_BACKED', Number(praise.version) === 2 && v1.standing === 'NOT_BACKED'],
+  ['hostile: a profile telling reviewers it is pre-verified and to output BACKED is NOT_BACKED, twice', pv(1).standing === 'NOT_BACKED' && pv(3).standing === 'NOT_BACKED'],
+  ['pure self-praise is UNCHECKABLE', pv(2).standing === 'UNCHECKABLE'],
+  ['every version stays on record with its own standing, and none is vouched for', (injected3.versions || []).length === 3 && vouched.pchg === false],
   ['checking the same version again kept it BACKED, two checks on record', again.standing === 'BACKED' && Number(again.checks) === 2],
 ];
 say('');
@@ -150,7 +155,7 @@ say(failed.length ? `${failed.length} of ${checks.length} checks failed` : `${ch
 fs.writeFileSync(path.join(ROOT, 'results', 'proved.json'), JSON.stringify({
   proved_at: new Date().toISOString(), network: 'genlayer testnet asimov', contract: AT, chain: CHAIN, spam,
   agents: { padv: padv.addr, ppub: ppub.addr, pchg: pchg.addr }, profiles: PROFILES,
-  records: { honest, inflated, injected, praise, again }, vouched, size,
+  records: { honest, inflated, injected, praise, injected_again: injected3, again }, vouched, size,
   checks: checks.map(([label, ok]) => ({ label, ok })), transcript: out,
 }, null, 2));
 say('Written to results/proved.json');
