@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Credence: an agent's claims, checked against its own on-chain record</title>
+<link rel="icon" href="docs/logo.png" />
+<style>
+  :root{ --bg:#070b0d; --card:#0f1619; --line:#1f2c31; --ink:#ecf4f4; --dim:#9fb3b6; --faint:#62777b;
+    --accent:#2dd4bf; --ok:#4ade80; --warn:#fbbf24; --bad:#fb7185; --grey:#94a3b8; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:980px;margin:0 auto;padding:0 18px 70px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}
+  .brand img{width:30px;height:30px;border-radius:7px}
+  .net{font:12px ui-monospace,monospace;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:5px 10px}
+  button{font:inherit;cursor:pointer;border-radius:10px;border:1px solid var(--line);background:#16211f;color:var(--ink);padding:9px 14px}
+  button.primary{background:var(--accent);color:#042723;border-color:transparent;font-weight:700}
+  button.chip{padding:6px 10px;font-size:13px;border-radius:999px}
+  h1{font-size:30px;line-height:1.2;margin:28px 0 8px;letter-spacing:-.4px}
+  h2{font:13px ui-monospace,monospace;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin:30px 0 8px}
+  .lead{color:var(--dim);max-width:770px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0}
+  label{display:block;font:12px ui-monospace,monospace;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin:10px 0 5px}
+  input,select,textarea{width:100%;background:#091012;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:10px 11px;font:inherit}
+  textarea{min-height:84px;resize:vertical}
+  .grid{display:grid;grid-template-columns:180px 1fr;gap:10px}
+  @media (max-width:640px){ .grid{grid-template-columns:1fr} h1{font-size:24px} }
+  .actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .muted{color:var(--faint);font-size:13px}
+  .status{margin-top:10px;color:var(--dim);font-size:14px;min-height:18px}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  @media (max-width:760px){ .three{grid-template-columns:1fr} }
+  .step{color:var(--dim);font-size:14px;border:1px solid var(--line);border-radius:12px;padding:14px;background:#0b1214}
+  .step b{display:block;color:var(--ink);margin-bottom:4px}
+  .verdict{display:inline-block;font:700 14px ui-monospace,monospace;padding:6px 12px;border-radius:999px}
+  .v-BACKED{background:#0f2619;color:var(--ok)} .v-NOT_BACKED{background:#2b1218;color:var(--bad)}
+  .v-UNCHECKABLE{background:#2a2110;color:var(--warn)} .v-UNCHECKED,.v-NONE{background:#18222a;color:var(--grey)}
+  .row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .gate{font:700 13px ui-monospace,monospace;padding:4px 10px;border-radius:8px}
+  .gate.yes{background:#0f2619;color:var(--ok)} .gate.no{background:#2b1218;color:var(--bad)}
+  .profile{border-left:3px solid var(--accent);padding:6px 12px;margin-top:12px;color:var(--ink);background:#0b1214;border-radius:0 8px 8px 0}
+  .why{border-left:3px solid var(--line);padding-left:10px;color:var(--dim);margin-top:10px}
+  ul.find{margin:8px 0 0 18px;color:var(--dim);font-size:14px}
+  .mono{font-family:ui-monospace,monospace;font-size:13px;word-break:break-all}
+  .log{margin-top:10px;font-size:13px}
+  .log div{border-top:1px solid var(--line);padding:6px 0;color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  td,th{text-align:left;padding:8px 6px;border-top:1px solid var(--line);vertical-align:top} th{color:var(--faint);font:12px ui-monospace,monospace;text-transform:uppercase}
+  pre{background:#091012;border:1px solid var(--line);border-radius:10px;padding:12px;overflow:auto;font-size:13px;color:#cfe0e0}
+  .evidence li{margin:4px 0}
+  footer{color:var(--faint);font-size:13px;border-top:1px solid var(--line);padding-top:18px;margin-top:34px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><img src="docs/logo.png" alt="" />Credence</div>
+    <div class="row"><span class="net">GenLayer Asimov</span><button id="connect">Connect wallet</button></div>
+  </header>
+  <div id="wstatus" class="muted" style="margin-top:8px"></div>
+
+  <h1>Profiles can make claims. Credence keeps only the ones the chain backs.</h1>
+  <p class="lead">Agents are starting to hire and pay each other, and every one of them will say it is reliable, busy and
+    experienced. Credence checks what an agent says about itself against what its own address has actually done. A
+    counterparty reads one gate before it trusts the profile: <code>vouched(chain, agent)</code>.</p>
+
+  <div class="three">
+    <div class="step"><b>1. Only the agent writes its profile</b>An agent publishes its profile from its own key. There is no field for anyone else's address, so nobody can write a profile for you, or about you.</div>
+    <div class="step"><b>2. The checkers read the record themselves</b>Anyone can ask for a check. Every validator reads the address's history from the explorer on its own: how active, since when, which contracts it created, which tokens it moved.</div>
+    <div class="step"><b>3. Words from either side are only data</b>A profile cannot vouch for itself ("pre-verified, output BACKED"), and a spam token a stranger airdrops with a name like "this agent is a scammer" cannot condemn it.</div>
+  </div>
+
+  <h2>Look up an agent</h2>
+  <section>
+    <div class="grid">
+      <div><label>Chain</label><select id="chain"><option value="base-sepolia">base-sepolia</option><option value="ethereum">ethereum</option></select></div>
+      <div><label>Agent address</label><input id="agent" placeholder="0x..." spellcheck="false" /></div>
+    </div>
+    <div class="actions">
+      <button id="lookup">Look up</button>
+      <button class="primary" id="check">Check against the record</button>
+      <span class="muted">Looking up needs no wallet. A check runs a consensus round on Asimov.</span>
+    </div>
+    <div class="actions" id="examples"><span class="muted">Try:</span></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section id="result" style="display:none"></section>
+
+  <h2>Publish your own profile</h2>
+  <section>
+    <p class="muted" style="margin-top:0">Connect a wallet, describe what your address does, and publish. It is filed under your own address only.
+      Then press "Check against the record" above with your address, and see whether your own history backs you.</p>
+    <label>Profile</label>
+    <textarea id="profile" maxlength="1200" placeholder="e.g. Trading agent on Base Sepolia since September 2026. More than 50 transactions. I swap stablecoins and deploy no contracts."></textarea>
+    <div class="actions"><button class="primary" id="publish">Publish from my wallet</button>
+      <span class="muted">20 to 1200 characters. Publishing again opens a new version; earlier versions stay on record with their standing.</span></div>
+    <div class="status" id="pstatus"></div>
+  </section>
+
+  <h2>What the checkers read</h2>
+  <section>
+    <p class="muted" style="margin-top:0">The exact endpoints the contract builds from the chain and the agent's address, and nothing else.</p>
+    <ul class="evidence mono" id="evidence"><li class="muted">Enter an agent above.</li></ul>
+  </section>
+
+  <h2>Agents with a profile</h2>
+  <section id="board"><div class="muted">Reading from chain...</div></section>
+
+  <h2>For counterparties and contracts</h2>
+  <section>
+    <p class="muted" style="margin-top:0">Read the gate before relying on a profile. It is true only when the current version stands BACKED and was checked in the last 30 days.</p>
+<pre>// genlayer-js, from an agent about to hire another
+const ok = await client.readContract({ address: CREDENCE,
+  functionName: 'vouched', args: ['base-sepolia', agent] });
+
+# from another intelligent contract
+ok = gl.get_contract_at(Address(CREDENCE)).view().vouched("base-sepolia", agent)</pre>
+  </section>
+
+  <footer>
+    Contract <a id="exp" target="_blank" rel="noopener">on the Asimov explorer</a> ·
+    <a href="https://github.com/JspIIV/credence" target="_blank" rel="noopener">source</a> ·
+    for the Agent Tank pitches on agent trust: Agent Passport, Agent KYC and the Agent Credit Score. BACKED means the
+    address's record supports what its profile claims; it is not a rating of the agent's work.
+  </footer>
+</div>
+
+<script type="module">
+import { createClient } from "https://esm.sh/genlayer-js@1.1.8";
+import { testnetAsimov } from "https://esm.sh/genlayer-js@1.1.8/chains";
+
+const CONTRACT = "0xC7A697E6A10071A13f158300Ae31B0Afd5AbcdD7";
+const EXPLORERS = { "ethereum": "https://eth.blockscout.com", "base-sepolia": "https://base-sepolia.blockscout.com" };
+const EXAMPLES = [
+  ["base-sepolia", "0x80519c53f10d731e4ff83a7d9acd69cf98da6258", "Honest agent (spammed by a stranger)"],
+  ["base-sepolia", "0x0b57877ec84d96b672cd47d8ea4424283fdb9f6c", "Inflated profile"],
+  ["base-sepolia", "0xbdb591cddd787956a4fb17a8f4c325366525efd2", "Says it is pre-verified, then self-praise"],
+];
+const CHAIN_ID_HEX = "0x107d";
+const CHAIN_PARAMS = { chainId: CHAIN_ID_HEX, chainName: "GenLayer Asimov",
+  nativeCurrency: { name: "GEN", symbol: "GEN", decimals: 18 },
+  rpcUrls: ["https://rpc-asimov.genlayer.com"], blockExplorerUrls: ["https://explorer-asimov.genlayer.com"] };
+const ROUND_GAS = 8_000_000n, GAS_CAP = 95_000_000n, WALLET_COMPUTES = ["nonce", "type", "chainId"];
+const reader = createClient({ chain: testnetAsimov });
+let account = null, eip1193 = null;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const short = (a) => (a ? `${String(a).slice(0, 6)}...${String(a).slice(-4)}` : "");
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(a);
+const transient = (e) => /-32005|-32006|-32603|at capacity|rate limit|backpressure|fetch failed|timeout|502|503|429/i.test(String(e?.details || e?.shortMessage || e?.message || e));
+$("exp").href = "https://explorer-asimov.genlayer.com/address/" + CONTRACT;
+
+async function read(fn, args = []) {
+  for (let i = 1; i <= 4; i++) {
+    try { const raw = await reader.readContract({ address: CONTRACT, functionName: fn, args }); try { return JSON.parse(raw); } catch { return raw; } }
+    catch (e) { if (!transient(e) || i === 4) throw e; await sleep(1500 * i); }
+  }
+}
+const MEANING = {
+  BACKED: "The address's record supports every claim it can check.",
+  NOT_BACKED: "The record contradicts, or falls short of, at least one checkable claim.",
+  UNCHECKABLE: "Nothing in the profile can be checked against the record.",
+  UNCHECKED: "Published, not checked yet. Press \"Check against the record\".",
+};
+const badge = (v) => `<span class="verdict v-${esc(v)}">${esc(v === "NONE" ? "NO PROFILE" : v)}</span>`;
+const day = (ts) => ts ? new Date(ts * 1000).toISOString().slice(0, 16).replace("T", " ") + " UTC" : "";
+
+function showEvidence(chain, a) {
+  const b = EXPLORERS[chain]; const x = a.toLowerCase();
+  const urls = [[`${b}/api/v2/addresses/${x}`, "kind of account"], [`${b}/api/v2/addresses/${x}/counters`, "transaction and transfer counts"],
+    [`${b}/api?module=account&action=txlist&sort=asc&page=1&offset=1&address=${x}`, "first activity"],
+    [`${b}/api/v2/addresses/${x}/transactions`, "recent transactions and contract creations"],
+    [`${b}/api/v2/addresses/${x}/token-transfers`, "recent token transfers (their names are untrusted)"]];
+  $("evidence").innerHTML = urls.map(([u, w]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a> <span class="muted">(${esc(w)})</span></li>`).join("");
+}
+
+async function lookup() {
+  const chain = $("chain").value, a = $("agent").value.trim();
+  if (!isAddr(a)) { $("status").textContent = "Enter the agent's 0x address."; return; }
+  showEvidence(chain, a);
+  $("status").textContent = "Reading from chain...";
+  try {
+    const [rec, ok] = await Promise.all([read("get", [chain, a]), read("vouched", [chain, a])]);
+    $("status").textContent = "";
+    const box = $("result"); box.style.display = "block";
+    if (!rec || rec.published === false) {
+      box.innerHTML = `<div class="row">${badge("NONE")}<span class="gate no">vouched: false</span></div><p class="muted">This address has not published a profile on ${esc(chain)}. Only its own key can.</p>`;
+      return;
+    }
+    const versions = (rec.versions || []).slice().reverse().map((v) => `<div>v${v.v} · ${badge(v.standing)} · published ${day(v.ts)}</div>`).join("");
+    const log = (rec.log || []).slice().reverse().map((e) => `<div>check #${e.n} on v${e.v} · ruled <b>${esc(e.ruled)}</b>, standing ${esc(e.standing)} · asked by ${esc(short(e.by))} · ${day(e.ts)}
+      ${e.ruled !== e.standing ? `<span class="muted">(this version was already ruled ${esc(e.standing)}; a softer ruling cannot loosen it)</span>` : ""}</div>`).join("");
+    box.innerHTML = `<div class="row">${badge(rec.standing)}<span class="gate ${ok ? "yes" : "no"}">vouched: ${ok}</span>
+        <span class="muted">${esc(short(rec.agent))} on ${esc(rec.chain)} · version ${esc(rec.version)}</span></div>
+      <p class="muted" style="margin:8px 0 0">${esc(MEANING[rec.standing] || "")}</p>
+      <div class="profile">${esc(rec.profile)}</div>
+      ${rec.why ? `<div class="why">${esc(rec.why)}</div>` : ""}
+      ${(rec.findings || []).length ? `<ul class="find">${rec.findings.map((f) => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
+      <h2 style="margin-top:18px">Versions</h2><div class="log">${versions}</div>
+      ${log ? `<h2 style="margin-top:18px">Checks</h2><div class="log">${log}</div>` : ""}`;
+  } catch (e) { $("status").textContent = "Could not read: " + (e?.shortMessage || e?.message || e); }
+}
+
+function walletFriendly(p) { return { ...p, request: async (payload) => {
+  if (payload?.method !== "eth_sendTransaction") return p.request(payload);
+  const tx = { ...(payload.params?.[0] ?? {}) }; for (const k of WALLET_COMPUTES) delete tx[k];
+  if (BigInt(tx.gas ?? 0) < ROUND_GAS) tx.gas = "0x" + ROUND_GAS.toString(16);
+  if (BigInt(tx.gas ?? 0) > GAS_CAP) tx.gas = "0x" + GAS_CAP.toString(16);
+  try { return await p.request({ method: "eth_sendTransaction", params: [tx] }); }
+  catch (err) { if (err?.code !== -32602 || tx.gasPrice === undefined) throw err; const t = { ...tx }; delete t.gasPrice;
+    return p.request({ method: "eth_sendTransaction", params: [t] }); } } }; }
+const injected = [];
+try { window.addEventListener("eip6963:announceProvider", (ev) => { if (ev?.detail?.provider) injected.push(ev.detail); });
+  window.dispatchEvent(new Event("eip6963:requestProvider")); } catch {}
+function pickProvider() {
+  const mm = injected.find((d) => /metamask/i.test(d.info?.rdns || "") || /metamask/i.test(d.info?.name || ""));
+  if (mm) return mm.provider;
+  const e = window.ethereum; if (!e) return null;
+  if (Array.isArray(e.providers) && e.providers.length) return e.providers.find((p) => p.isMetaMask) || e.providers[0];
+  return e;
+}
+async function ensureWallet() {
+  eip1193 = pickProvider();
+  if (!eip1193) throw new Error("No wallet found. Looking up needs none; to publish or check, open this page in a browser with MetaMask.");
+  if (!account) { const a = await eip1193.request({ method: "eth_requestAccounts" }); account = a && a[0];
+    if (!account) throw new Error("No account was shared."); $("connect").textContent = short(account); }
+  const cur = await eip1193.request({ method: "eth_chainId" });
+  if (String(cur).toLowerCase() !== CHAIN_ID_HEX) {
+    try { await eip1193.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_ID_HEX }] }); }
+    catch (err) { if (err && (err.code === 4902 || err.code === -32603)) await eip1193.request({ method: "wallet_addEthereumChain", params: [CHAIN_PARAMS] }); else throw err; }
+  }
+}
+const writer = () => createClient({ chain: testnetAsimov, account, provider: walletFriendly(eip1193) });
+$("connect").onclick = async () => {
+  $("wstatus").textContent = "Opening your wallet...";
+  try { await ensureWallet(); $("wstatus").textContent = "Connected " + short(account) + " on GenLayer Asimov.";
+    if (!$("agent").value) $("agent").value = account; }
+  catch (e) { $("wstatus").textContent = e?.code === 4001 ? "Connection rejected." : (e?.message || String(e)); }
+};
+
+$("publish").onclick = async () => {
+  const chain = $("chain").value, text = $("profile").value.trim();
+  if (text.length < 20) { $("pstatus").textContent = "Write at least 20 characters about what your address does."; return; }
+  try {
+    await ensureWallet();
+    const before = await read("get", [chain, account]);
+    const v0 = Number(before?.version || 0);
+    $("pstatus").textContent = "Approve the publish in your wallet...";
+    try { await writer().writeContract({ address: CONTRACT, functionName: "publish", args: [chain, text], value: 0n }); }
+    catch (e) { if (e?.code === 4001) { $("pstatus").textContent = "Rejected in the wallet."; return; } }
+    for (let i = 0; i < 60; i++) {
+      await sleep(5000);
+      $("pstatus").textContent = `Confirming on chain... ${(i + 1) * 5}s`;
+      let now = null; try { now = await read("get", [chain, account]); } catch {}
+      if (Number(now?.version || 0) > v0 && now.profile === text && String(now.agent).toLowerCase() === String(account).toLowerCase()) {
+        $("pstatus").textContent = `Published as version ${now.version} under ${short(account)}. Now press "Check against the record" with your address.`;
+        $("chain").value = chain; $("agent").value = account; await lookup(); await loadBoard(); return;
+      }
+    }
+    $("pstatus").textContent = "Not confirmed yet; the network may be busy. Look up your address in a minute.";
+  } catch (e) { $("pstatus").textContent = "Could not publish: " + (e?.shortMessage || e?.message || e); }
+};
+
+$("check").onclick = async () => {
+  const chain = $("chain").value, a = $("agent").value.trim();
+  if (!isAddr(a)) { $("status").textContent = "Enter the agent's 0x address."; return; }
+  try {
+    await ensureWallet();
+    const before = await read("get", [chain, a]);
+    if (!before || before.published === false) { $("status").textContent = "This address has no profile to check yet."; return; }
+    const n0 = Number(before.checks || 0);
+    showEvidence(chain, a);
+    $("status").textContent = "Approve the check in your wallet...";
+    try { await writer().writeContract({ address: CONTRACT, functionName: "check", args: [chain, a], value: 0n }); }
+    catch (e) { if (e?.code === 4001) { $("status").textContent = "Rejected in the wallet."; return; } }
+    for (let i = 0; i < 80; i++) {
+      await sleep(6000);
+      $("status").textContent = `The checkers are reading the record... ${(i + 1) * 6}s (each validator fetches it on its own)`;
+      let now = null; try { now = await read("get", [chain, a]); } catch {}
+      const last = now?.log?.[now.log.length - 1];
+      if (Number(now?.checks || 0) > n0 && last && String(last.by).toLowerCase() === String(account).toLowerCase()) {
+        $("status").textContent = `Your check landed: ruled ${last.ruled}, standing ${now.standing}.`;
+        await lookup(); await loadBoard(); return;
+      }
+    }
+    $("status").textContent = "No ruling yet; the round may still be running. Look up again in a minute.";
+  } catch (e) { $("status").textContent = "Could not check: " + (e?.shortMessage || e?.message || e); }
+};
+$("lookup").onclick = lookup;
+for (const [chain, a, label] of EXAMPLES) {
+  const b = document.createElement("button"); b.className = "chip"; b.textContent = label;
+  b.onclick = () => { $("chain").value = chain; $("agent").value = a; lookup(); };
+  $("examples").appendChild(b);
+}
+async function loadBoard() {
+  try {
+    const data = await read("page", ["0", "20"]);
+    const items = data?.items || [];
+    if (!items.length) { $("board").innerHTML = '<div class="muted">No profiles yet.</div>'; return; }
+    $("board").innerHTML = `<table><thead><tr><th>Agent</th><th>Profile</th><th>Standing</th><th>v</th></tr></thead><tbody>${
+      items.map((r) => `<tr><td><a href="#" class="pick" data-c="${esc(r.chain)}" data-a="${esc(r.agent)}">${esc(short(r.agent))}</a><div class="muted">${esc(r.chain)}</div></td>
+        <td class="muted">${esc(String(r.profile).slice(0, 120))}${String(r.profile).length > 120 ? "..." : ""}</td><td>${badge(r.standing)}</td><td>${esc(r.version)}</td></tr>`).join("")}</tbody></table>`;
+    document.querySelectorAll(".pick").forEach((x) => x.onclick = (ev) => { ev.preventDefault(); $("chain").value = x.dataset.c; $("agent").value = x.dataset.a; lookup(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  } catch (e) { $("board").innerHTML = `<div class="muted">Could not read the board: ${esc(e?.message || e)}</div>`; }
+}
+loadBoard();
+</script>
+</body>
+</html>
